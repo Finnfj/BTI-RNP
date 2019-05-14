@@ -1,139 +1,132 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
+#include "socket_client.h"
 
-#define SRV_PORT	4715
+#define SRV_PORT	"4715"
 #define MAXDATASIZE 1000
 
-bool connected = false;
-int socket;
-
-int main ( )
-{
-    while(1)
-    {
-        char* lineBuf = NULL;
-        size_t lineSize = 0;
-
-        if(getline(&lineBuf, &lineSize, stdin) == -1)
-        {
-            perror("Failed to get input");
-            fflush(stderr);
-            free(lineBuf);
-            lineBuf = NULL;
-            return -1;
-        }
-
-        size_t lineBuflen = strlen(lineBuf);
-        if(lineBuf[lineBuflen - 1] == '\n')
-        {
-            lineBuf[lineBuflen - 1] = '\0';
-        }
-        fflush(stdout);
-
-        char* nextToken = NULL;
-        char* originalmsg = malloc(strlen(lineBuf));
-        strcpy(originalmsg, lineBuf);
-        nextToken = strtok(lineBuf, " ");
-
-        if(strcmp(lineBuf, "connect") == 0)
-        {
-            if (connected) {
-                fprintf(stderr, "We are already connected\n");
-                fflush(stderr);
-            } else {
-                nextToken = strtok(NULL, " ");
-                if(isValidArgument(nextToken))
-                {
-                    socket = connect(nextToken);
-                    
-                    if (socket == -1) {
-                        fprintf(stderr, "Connection was refused.\n");
-                        fflush(stderr);
-                    } else {
-                        connected = true;
-                        puts("Connection was established!");
-                        fflush(stdout);
-                    }
-                }
-                else
-                {
-                    fprintf(stderr, "Argument missing\n");
-                    fflush(stderr);
-                }
-            }
-        }
-        
-        // bis hierhin geupdated
-        else if(strcmp(lineBuf, "disconnect") == 0)
-        {
-            disconnectFromPeer();
-        }
-        else if(strcmp(lineBuf, "say") == 0)
-        {
-            nextToken = strtok(NULL, " ");
-            if(isValidArgument(nextToken))
-            {
-                sayToPeer(originalmsg + 4);
-            }
-            else
-            {
-                fprintf(stderr, "Argument missing\n");
-                fflush(stderr);
-            }
-        }
-        else if(strcmp(lineBuf, "send") == 0)
-        {
-            nextToken = strtok(NULL, " ");
-
-            if(isValidArgument(nextToken))
-            {
-                sendToPeer(nextToken);
-            }
-            else
-            {
-                fprintf(stderr, "Argument missing\n");
-                fflush(stderr);
-            }
-        }
-        else if(strcmp(lineBuf, "host") == 0)
-        {
-            free(lineBuf);
-            lineBuf = NULL;
-            hostConnection();
-        }
-        else if(strcmp(lineBuf, "quit") == 0)
-        {
-            free(lineBuf);
-            lineBuf = NULL;
-            quit();
-        }
-        else
-        {
-            puts("Unknown command");
-            fflush(stdout);
-        }
-        free(lineBuf);
-        lineBuf = NULL;
-        free(originalmsg);
-        originalmsg = NULL;
-    }
+struct transfer {
+	bool putget;
+	char name[20];
+	FILE* payload;
 }
+
+bool connected = false;
+int sockfd;
+
+int main()
+{
+	while(1)
+	{
+		char* linebuf = NULL;
+		size_t linesize = 0;
+
+		if(getline(&linebuf, &linesize, stdin) == -1)
+		{
+		    perror("Failed to get input");
+		    fflush(stderr);
+		    free(linebuf);
+		    linebuf = NULL;
+		    return -1;
+		}
+
+		size_t linebuflen = strlen(linebuf);
+		if(linebuf[linebuflen - 1] == '\n')
+		{
+		    linebuf[linebuflen - 1] = '\0';
+		}
+		fflush(stdout);
+
+		char* nextToken = NULL;
+		char* originalmsg = malloc(strlen(linebuf));
+		strcpy(originalmsg, linebuf);
+		nextToken = strtok(linebuf, " ");
+
+		// Check what command was entered
+		if(strcmp(linebuf, "connect") == 0) {
+			// Connect if we aren't, do nothing otherwise
+			if (connected) {
+				fprintf(stderr, "We are already connected\n");
+				fflush(stderr);
+			} else {
+				// Get second argument (address)
+				nextToken = strtok(NULL, " ");
+				if (isValidArgument(nextToken)) {
+					sockfd = connectToServer(nextToken);
+
+					if (sockfd == -1) {
+						fprintf(stderr, "Connection was refused.\n");
+						fflush(stderr);
+					} else {
+						connected = true;
+						puts("Connection was established!");
+						fflush(stdout);
+					}
+				} else {
+				    fprintf(stderr, "Argument missing\n");
+				    fflush(stderr);
+				}
+			}
+		} else if(strcmp(linebuf, "put") == 0) {
+			// Get second argument (file)
+			nextToken = strtok(NULL, " ");
+			if(isValidArgument(nextToken)) {
+				// Try sending file to server
+				sendFile(nextToken);
+			} else {
+				fprintf(stderr, "Argument missing\n");
+				fflush(stderr);
+			}
+		}
+		else if (strcmp(linebuf, "get") == 0) {
+			// Get second argument (file)
+			nextToken = strtok(NULL, " ");
+
+			if(isValidArgument(nextToken)) {
+				getFile(nextToken);
+			} else {
+				fprintf(stderr, "Argument missing\n");
+				fflush(stderr);
+			}
+		} else if (strcmp(linebuf, "quit") == 0) {
+			// Disconnect and quit program
+			disconnect();
+			exit(EXIT_SUCCESS);
+		} else {
+		    puts("Unknown command");
+		    fflush(stdout);
+		}
+		
+		free(linebuf);
+		linebuf = NULL;
+		free(originalmsg);
+		originalmsg = NULL;
+	}
+}
+
 
 /*
  * Check if argument is not null or length 0
  */
 bool isValidArgument(char* str)
 {
-    return ((str != NULL) && (strlen(str) > 0));
+	bool valid = (str != NULL) && (strlen(str) > 0);
+	return valid;
 }
 
-int connect(char* address) {
+
+/*
+ * Connect to a server with the given address
+ */
+int connectToServer(char* address) {
     int s_tcp;			        // socket descriptor
     struct addrinfo hints;      // getaddrinfo parameters
     struct addrinfo* res;       // getaddrinfo result
@@ -145,8 +138,9 @@ int connect(char* address) {
     // TCP only
     hints.ai_socktype = SOCK_STREAM;
     
-    // get addresses    
-    if(0 != getaddrinfo(address, SRV_PORT, &hints, &res))
+    // get addresses   
+    int status = getaddrinfo(address, SRV_PORT, &hints, &res);
+    if(0 != status)
     {
         fprintf(stderr, "Error: %s\n", gai_strerror(status)); // gai_strerror is getaddrinfo's Error descriptor
         fflush(stderr);
@@ -205,33 +199,44 @@ int connect(char* address) {
     
     return s_tcp;
 }
-    
-/*   int s_tcp;			// socket descriptor 
-  struct sockaddr_in sa;	// socket address structure
-  int sa_len = sizeof(struct sockaddr_in), n;
-  char* msg="Hello World!";
 
-
-  sa.sin_family = AF_INET;
-  sa.sin_port = htons(SRV_PORT);
-
-  if (inet_pton(sa.sin_family,SRV_ADDRESS, &sa.sin_addr.s_addr) <= 0) {
-	perror("Address Conversion");
-	exit(1);
+/*
+ * Disconnect from server
+ */
+void disconnect() {
+	if (connected) {
+		close(sockfd);
+		puts("disconnected");
+		fflush(stdout);
+	} else {
+		puts("We aren't connected");
+		fflush(stdout);
 	}
+}
 
-  if ((s_tcp=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP)) < 0) {
-	perror("TCP Socket");
-	exit(1);
-	}
 
-  if (connect(s_tcp,(struct sockaddr*) &sa, sa_len) < 0) {
-	perror("Connect");
-	exit(1);
-	}
+/*
+ * Send a file to server
+ */
+void sendFile(char* filename) {
+	struct transfer t;
+	FILE* f;
+	t.putget = true;
+	t.payload = f;
+	
+	printf("sent %s to server\n", filename);
+	fflush(stdout);
+}
 
-  if((n=send(s_tcp,msg, strlen(msg),0)) > 0) {
-	printf("Message %s sent ( %i Bytes).\n", msg, n); 
-	}
 
-  close(s_tcp); */
+/*
+ * Get a file from server
+ */
+void getFile(char* filename) {
+	struct transfer t;
+	t.putget = true;
+	strcpy(&t.name, filename);
+	
+	printf("got %s from server\n", filename);
+	fflush(stdout);
+}

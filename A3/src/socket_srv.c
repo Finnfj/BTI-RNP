@@ -5,28 +5,43 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <netdb.h>
+#include <errno.h>
+#include "socket_srv.h"
 
 #include <sys/select.h>
 #include <fcntl.h>
 
-#define SRV_PORT	4715
+#define SRV_PORT	"4715"
 #define MAXDATASIZE 1000
 #define MAXCLIENTS  5
 
+
+struct transfer {
+	bool putget;
+	char name[20];
+	FILE* payload;
+}
+
 // manage client addresses
 struct sockaddr_ref {
+	bool occupied;
 	int socknum;
 	struct sockaddr_storage cliaddr;
 };
+
+int s_tcp;	// Main socket descriptor
+struct sockaddr_ref cliaddresses[MAXCLIENTS];   // Store client informations
+
 
 // cleanup
 void free_sock(void) {
     close(s_tcp);
     for (int j=0; j < MAXCLIENTS; j++) {
-        if (NULL != cliaddresses[j].cliaddr)
-        {
-            close(cliaddresses[j].socknum);
-        }
+	if (cliaddresses[j].occupied) {
+        	close(cliaddresses[j].socknum);
+	}
     }
 }
 
@@ -38,7 +53,7 @@ int main ( )
     // Clean up on exit if possible
     atexit(free_sock);
     
-    int s_tcp, newss;			// socket descriptor
+    int newss;			// socket descriptor
     int maxfd, n;               // Main loop values
     char buffer[MAXDATASIZE];   // buffer
     struct addrinfo hints;      // getaddrinfo parameters
@@ -47,11 +62,13 @@ int main ( )
     
     fd_set master, readfds;    // Filedescriptor sets for non-blocking multiplexing
     
-    struct sockaddr_ref cliaddresses[MAXCLIENTS];   // Store client informations
     struct sockaddr_storage *cliaddrp;              // Pointer to a cliaddr from cliaddresses
     socklen_t cliaddrlen;                           // Set later due to possible padding causing different lengths, means sizeof(cliaddr)
     
+	
+    memset(&cliaddresses, 0, sizeof(cliaddresses));
     memset(&hints, 0, sizeof(hints));
+	
     // either IPv4/IPv6
     hints.ai_family = AF_UNSPEC;
     // TCP only
@@ -61,7 +78,9 @@ int main ( )
     
     
     // get addresses    
-    if(0 != getaddrinfo(NULL, SRV_PORT, &hints, &res))
+    int status = 0;
+    status = getaddrinfo(NULL, SRV_PORT, &hints, &res);
+    if (0 != status)
     {
         fprintf(stderr, "Error: %s\n", gai_strerror(status)); // gai_strerror is getaddrinfo's Error descriptor
         fflush(stderr);
@@ -80,8 +99,8 @@ int main ( )
         }
 
         // Set socket option to reuse local addresses
-        int true = 1;
-        if(-1 == setsockopt(s_tcp, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(int)))
+        int par = 1;
+        if(-1 == setsockopt(s_tcp, SOL_SOCKET, SO_REUSEADDR, &par, sizeof(int)))
         {
             close(s_tcp);
             perror("Error setting socket option");
@@ -117,7 +136,7 @@ int main ( )
     fflush(stdout);
     
     // Listen on socket
-    if(-1 == listen(s_tcp, MAXCLIENTS))
+    if (-1 == listen(s_tcp, MAXCLIENTS))
     {
         perror("Error listening");
         fflush(stderr);
@@ -125,7 +144,7 @@ int main ( )
     }
     
     // Configure socket file descriptor to non-blocking
-    if (-1 == (fcntl(s_tcp, F_SETFD, O_NONBLOCK)
+    if (-1 == (fcntl(s_tcp, F_SETFD, O_NONBLOCK)))
     {
         perror("Error changing socketfd to non-blocking");
         fflush(stderr);
@@ -161,7 +180,7 @@ int main ( )
         fflush(stdout);
 
         // iterate socket fds and work with them
-        for (i=0; i<=maxfd && n>0; i++)
+        for (int i=0; i<=maxfd && n>0; i++)
         {
             // only do something with socket fds we own
             if (FD_ISSET(i, &readfds))
@@ -170,14 +189,14 @@ int main ( )
                 n--;
                 
                 // is this our main socket? If so try to accept news connections
-                if (i == sockfd)
+                if (i == s_tcp)
                 {
                     // find a free slot for our cliaddr
                     int freeslot = 0;
                     int j;
                     
                     for (j=0; j < MAXCLIENTS; j++) {
-                        if (NULL == cliaddresses[j].cliaddr)
+                        if (false == cliaddresses[j].occupied)
                         {
                             // Set pointer to free slots cliaddr
                             cliaddrp = &cliaddresses[j].cliaddr;
@@ -190,7 +209,7 @@ int main ( )
                     if (freeslot == 1)
                     {
                         socklen_t cliaddrlen = sizeof(*cliaddrp);
-                        if (-1 == (news = accept(sockfd, cliaddrp, &cliaddrlen)))
+                        if (-1 == (newss = accept(s_tcp, cliaddrp, &cliaddrlen)))
                         {
                             if (EWOULDBLOCK != errno)
                             {
@@ -201,28 +220,51 @@ int main ( )
                         else    // successfully accepted new socket
                         {
                             // set socket reference in our cliaddresses
-                            cliaddresses[j].socknum = news;
+                            cliaddresses[j].socknum = newss;
+			    cliaddresses[j].occupied = true;
                             
+				
+			    struct sockaddr* q = (struct sockaddr*)  cliaddrp;
+
+			    if(q->sa_family == AF_INET)
+			    {
+				struct in_addr* peerAddress = &(((struct sockaddr_in*)(q))->sin_addr);
+				char addrstrbuf[INET_ADDRSTRLEN] = "";
+				inet_ntop(AF_INET, peerAddress, addrstrbuf, sizeof(addrstrbuf));
+				printf("Connected to %s!\n", addrstrbuf);
+				fflush(stdout);
+			    }
+			    else //if( q->ai_family == AF_INET6 )
+			    {
+				struct in6_addr* peerAddress = &(((struct sockaddr_in6*)(q))->sin6_addr);
+				char addrstrbuf[INET6_ADDRSTRLEN] = "";
+				inet_ntop(AF_INET6, peerAddress, addrstrbuf, sizeof(addrstrbuf));
+				printf("Connected to %s!\n", addrstrbuf);
+				fflush(stdout);
+			    }
+			    
+			    
                             // Configure socket file descriptor to non-blocking
-                            if (-1 == (fcntl(news, F_SETFD, O_NONBLOCK)))
+                            if (-1 == (fcntl(newss, F_SETFD, O_NONBLOCK)))
                             {
                                 perror("Error changing comm fd to non-blocking");
                                 fflush(stderr);
                             }
 
                             // Add new socket to our main file descriptor
-                            FD_SET(news, &master);
+                            FD_SET(newss, &master);
     
                             // update max fd number if higher
-                            if (maxfd < news)
+                            if (maxfd < newss)
                             {
-                                maxfd = news;
+                                maxfd = newss;
                             }
                         }
                     }
                 }
                 else    // Communication socket, receive data
                 {
+		    int nbytes;
                     nbytes = recv(i, buffer, sizeof(buffer), 0);
                     if (nbytes <= 0)
                     {
@@ -233,18 +275,26 @@ int main ( )
                         }
                         break;
                     }
-                    
+		    
+		    
+                    struct transfer t;
+		    t = (struct transfer) buffer;
+		    
+		    if (t.putget) {
+			// Client sending file, receive and save
+			FILE* f = t.payload;
+		    } else {
+			// Client requests file, open and send
+			FILE* f;
+		    }
+		    
                     // Append EOS
-                    buffer[nbytes] = '\0';
+                    // buffer[nbytes] = '\0';
                     
                     // Print data
-                    printf("%s\n", buffer);
-                    printf("%zi bytes received.\n", nbytes);
+                    //printf("%s\n", buffer);
+                    printf("%i bytes received.\n", nbytes);
                     fflush(stdout);
-                    
-                    //uncomment if we want to close connection after file transfer
-                    //close(i);
-                    //FD_CLR(i, &master);
                 }
             }
         }

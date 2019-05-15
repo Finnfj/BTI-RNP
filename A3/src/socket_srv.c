@@ -16,13 +16,7 @@
 #define SRV_PORT	"4715"
 #define MAXDATASIZE 1000
 #define MAXCLIENTS  5
-
-
-struct transfer {
-	bool putget;
-	char name[20];
-	FILE* payload;
-}
+#define bufferSize 255
 
 // manage client addresses
 struct sockaddr_ref {
@@ -52,32 +46,32 @@ int main ( )
 {
     // Clean up on exit if possible
     atexit(free_sock);
-    
+
     int newss;			// socket descriptor
     int maxfd, n;               // Main loop values
     char buffer[MAXDATASIZE];   // buffer
     struct addrinfo hints;      // getaddrinfo parameters
     struct addrinfo* res;       // getaddrinfo result
     struct addrinfo* p;         // getaddrinfo iteration pointer
-    
+
     fd_set master, readfds;    // Filedescriptor sets for non-blocking multiplexing
-    
+
     struct sockaddr_storage *cliaddrp;              // Pointer to a cliaddr from cliaddresses
     socklen_t cliaddrlen;                           // Set later due to possible padding causing different lengths, means sizeof(cliaddr)
-    
-	
+
+
     memset(&cliaddresses, 0, sizeof(cliaddresses));
     memset(&hints, 0, sizeof(hints));
-	
+
     // either IPv4/IPv6
     hints.ai_family = AF_UNSPEC;
     // TCP only
     hints.ai_socktype = SOCK_STREAM;
     // Host
     hints.ai_flags = AI_PASSIVE;
-    
-    
-    // get addresses    
+
+
+    // get addresses
     int status = 0;
     status = getaddrinfo(NULL, SRV_PORT, &hints, &res);
     if (0 != status)
@@ -86,7 +80,7 @@ int main ( )
         fflush(stderr);
         return -1;
     }
-    
+
     // Create and bind socket
     for(p = res; p != NULL; p = p->ai_next)
     {
@@ -118,7 +112,7 @@ int main ( )
         // One successful socket is enough, go on
         break;
     }
-    
+
     // No network interface was found to run a socket on
     if(NULL == p)
     {
@@ -126,15 +120,15 @@ int main ( )
         fflush(stderr);
         return -1;
     }
-    
+
     // Release memory used for results
     freeaddrinfo(res);
-    
+
     // Wait for incoming connections
     puts("Start listening for connections...");
     printf("Listening on socket %i\n", s_tcp);
     fflush(stdout);
-    
+
     // Listen on socket
     if (-1 == listen(s_tcp, MAXCLIENTS))
     {
@@ -142,7 +136,7 @@ int main ( )
         fflush(stderr);
         return -1;
     }
-    
+
     // Configure socket file descriptor to non-blocking
     if (-1 == (fcntl(s_tcp, F_SETFD, O_NONBLOCK)))
     {
@@ -150,18 +144,18 @@ int main ( )
         fflush(stderr);
         return -1;
     }
-    
+
     // Empty fd sets
     FD_ZERO(&master);
     FD_ZERO(&readfds);
-    
+
     // Add hosting socket to main file descriptor
     FD_SET(s_tcp, &master);
-    
+
     // Need to always know the maximum integer value of all file descriptors, starts with hosting socket fd
     maxfd = s_tcp;
-    
-    
+
+
     // Main iteration loop
     while (1)
     {
@@ -187,14 +181,14 @@ int main ( )
             {
                 // process one fd, decrease number of ready fds we need to process
                 n--;
-                
+
                 // is this our main socket? If so try to accept news connections
                 if (i == s_tcp)
                 {
                     // find a free slot for our cliaddr
                     int freeslot = 0;
                     int j;
-                    
+
                     for (j=0; j < MAXCLIENTS; j++) {
                         if (false == cliaddresses[j].occupied)
                         {
@@ -204,7 +198,7 @@ int main ( )
                             break;
                         }
                     }
-                    
+
                     // accept if there is a free client slot
                     if (freeslot == 1)
                     {
@@ -222,8 +216,8 @@ int main ( )
                             // set socket reference in our cliaddresses
                             cliaddresses[j].socknum = newss;
 			    cliaddresses[j].occupied = true;
-                            
-				
+
+
 			    struct sockaddr* q = (struct sockaddr*)  cliaddrp;
 
 			    if(q->sa_family == AF_INET)
@@ -242,8 +236,8 @@ int main ( )
 				printf("Connected to %s!\n", addrstrbuf);
 				fflush(stdout);
 			    }
-			    
-			    
+
+
                             // Configure socket file descriptor to non-blocking
                             if (-1 == (fcntl(newss, F_SETFD, O_NONBLOCK)))
                             {
@@ -253,7 +247,7 @@ int main ( )
 
                             // Add new socket to our main file descriptor
                             FD_SET(newss, &master);
-    
+
                             // update max fd number if higher
                             if (maxfd < newss)
                             {
@@ -265,7 +259,26 @@ int main ( )
                 else    // Communication socket, receive data
                 {
 		    int nbytes;
-                    nbytes = recv(i, buffer, sizeof(buffer), 0);
+		    bzero(buffer, bufferSize);
+		    //read
+		    nbytes = read(newss, buffer, bufferSize);
+		    printf("Server received: %s", buffer);
+		    if(nbytes < 0)
+		    {
+			error("Error during the read function...");
+		    }
+		    printf("\nData received: %i", nbytes);
+		    printf("\nClient:  %s\n",  buffer);
+		    //clear the buffer
+		    bzero(buffer, bufferSize);
+		    //reads a message from stdin and stores it into the buffer
+		    fgets(buffer,  bufferSize, stdin);
+		    //write
+		    nbytes = write(newss, buffer, strlen(buffer));
+		    if(nbytes < 0)
+		    {
+			error("Error while writing function");
+		    }
                     if (nbytes <= 0)
                     {
                         if (EWOULDBLOCK != errno)
@@ -275,25 +288,8 @@ int main ( )
                         }
                         break;
                     }
-		    
-		    
-                    struct transfer t;
-		    t = (struct transfer) buffer;
-		    
-		    if (t.putget) {
-			// Client sending file, receive and save
-			FILE* f = t.payload;
-		    } else {
-			// Client requests file, open and send
-			FILE* f;
-		    }
-		    
-                    // Append EOS
-                    // buffer[nbytes] = '\0';
-                    
-                    // Print data
-                    //printf("%s\n", buffer);
-                    printf("%i bytes received.\n", nbytes);
+										//receiving files from clients
+                    printf("\n%i bytes received.\n", nbytes);
                     fflush(stdout);
                 }
             }

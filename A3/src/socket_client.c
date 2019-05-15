@@ -12,23 +12,18 @@
 
 #define SRV_PORT	"4715"
 #define MAXDATASIZE 1000
-
-struct transfer {
-	bool putget;
-	char name[20];
-	FILE* payload;
-}
+#define bufferSize 255
 
 bool connected = false;
 int sockfd;
 
 int main()
-{
+{	//MAIN LOOP
 	while(1)
-	{
+	{	
 		char* linebuf = NULL;
 		size_t linesize = 0;
-
+		
 		if(getline(&linebuf, &linesize, stdin) == -1)
 		{
 		    perror("Failed to get input");
@@ -47,7 +42,9 @@ int main()
 
 		char* nextToken = NULL;
 		char* originalmsg = malloc(strlen(linebuf));
+		//save the originalmsg from linebuf 
 		strcpy(originalmsg, linebuf);
+		//getfirst token and the delimiter is: " " 
 		nextToken = strtok(linebuf, " ");
 
 		// Check what command was entered
@@ -61,7 +58,6 @@ int main()
 				nextToken = strtok(NULL, " ");
 				if (isValidArgument(nextToken)) {
 					sockfd = connectToServer(nextToken);
-
 					if (sockfd == -1) {
 						fprintf(stderr, "Connection was refused.\n");
 						fflush(stderr);
@@ -79,7 +75,7 @@ int main()
 			// Get second argument (file)
 			nextToken = strtok(NULL, " ");
 			if(isValidArgument(nextToken)) {
-				// Try sending file to server
+				//sending a file to server
 				sendFile(nextToken);
 			} else {
 				fprintf(stderr, "Argument missing\n");
@@ -104,7 +100,7 @@ int main()
 		    puts("Unknown command");
 		    fflush(stdout);
 		}
-		
+
 		free(linebuf);
 		linebuf = NULL;
 		free(originalmsg);
@@ -131,14 +127,14 @@ int connectToServer(char* address) {
     struct addrinfo hints;      // getaddrinfo parameters
     struct addrinfo* res;       // getaddrinfo result
     struct addrinfo* p;         // getaddrinfo iteration pointer
-    
+
     memset(&hints, 0, sizeof(hints));
     // either IPv4/IPv6
     hints.ai_family = AF_UNSPEC;
     // TCP only
     hints.ai_socktype = SOCK_STREAM;
-    
-    // get addresses   
+
+    // get addresses
     int status = getaddrinfo(address, SRV_PORT, &hints, &res);
     if(0 != status)
     {
@@ -146,7 +142,7 @@ int connectToServer(char* address) {
         fflush(stderr);
         return -1;
     }
-    
+
     // Create and bind socket
     for(p = res; p != NULL; p = p->ai_next)
     {
@@ -168,7 +164,7 @@ int connectToServer(char* address) {
         // One successful socket is enough, go on
         break;
     }
-    
+
     // No network interface was found to run a socket on
     if(NULL == p)
     {
@@ -176,7 +172,7 @@ int connectToServer(char* address) {
         fflush(stderr);
         return -1;
     }
-    
+
     // Check for IPv4/IPv6
     if(p->ai_family == AF_INET)
     {
@@ -196,7 +192,7 @@ int connectToServer(char* address) {
     }
     // Connection complete, free addrinfo memory
     freeaddrinfo(res);
-    
+
     return s_tcp;
 }
 
@@ -217,26 +213,74 @@ void disconnect() {
 
 /*
  * Send a file to server
+ * //@author PM
  */
 void sendFile(char* filename) {
-	struct transfer t;
-	FILE* f;
-	t.putget = true;
-	t.payload = f;
-	
+
+	printf("The file has been succesfully sent.");
 	printf("sent %s to server\n", filename);
 	fflush(stdout);
+
+	char filecontent[MAXDATASIZE] = {0};
+	int size = getFileContent(filename, filecontent);
+	
+	int sentbytes = write(sockfd, filecontent, size);
+
+	printf("%i from %i bytes of data were sent", sentbytes, size);
 }
 
 
 /*
  * Get a file from server
+ * TODO	
  */
 void getFile(char* filename) {
-	struct transfer t;
-	t.putget = true;
-	strcpy(&t.name, filename);
-	
 	printf("got %s from server\n", filename);
 	fflush(stdout);
 }
+// put filecontent in to a char buffer
+//@author PM
+int getFileContent(char* filename, char* content){
+	FILE* fp = fopen(filename, "rb");
+	int size = 0;
+	char buffer[MAXDATASIZE];
+	size_t i;
+
+	for (i = 0; i < MAXDATASIZE; ++i)
+	{
+	    int c = getc(fp);
+	    //TODO errorhandling
+	    size++;
+	    if (c == EOF)
+	    {
+		buffer[i] = 0x00;
+		break;
+	    }
+
+	    buffer[i] = c;
+	}
+	
+	fclose(fp);
+	memcpy(content, buffer, size);
+
+	return size;
+	
+}
+
+
+// send simple message to server
+		//		printf("Client: %s\n", nextToken);
+		//		int n = write(sockfd, nextToken, strlen(nextToken));
+		//		if(n < 0)
+		//		{
+		//			perror("Error while writing to Server...");
+		//		}
+		//		printf("%i from %i bytes of data were sent", n, strlen(nextToken));
+				//antwort vom server lesen und in nextToken speichern
+		//		n = read(sockfd, nextToken, strlen(nextToken);
+				//error handling read function
+		//		if(n < 0)
+		//		{
+		//			perror("Error while reading...");
+		//		}
+		//		printf("Server: %s", linebuf);

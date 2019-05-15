@@ -7,5 +7,5 @@ int connectToServer(char*);
 void disconnect();
 void sendFile(char*);
 void getFile(char*);
-
+int getFileContent(char*, char*);
 #endif

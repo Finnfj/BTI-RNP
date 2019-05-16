@@ -260,32 +260,21 @@ int main ( )
                 {
 		    //TODO auslagern
 		    int nbytes;
-		    //TODO bzero funktion durch memset ersetzen
-		    //bzero(buffer, bufferSize);
-		    //read filecontent 
-		    //nbytes = read(newss, buffer, bufferSize);
-		    //printf("Server received: %s", buffer);
+		    memset(buffer, 0, (size_t) bufferSize);
+		    nbytes = read(newss, buffer, strlen(buffer));
+		    
+		    char* nextToken = NULL;
+		    nextToken = strtok(buffer, " ");
+		    printf("%s", nextToken);
+			
 		    nbytes = receiveFileFromClient();
 		    if(nbytes < 0)
 		    {
 			error("Error during the read function...");
 		    }
-		    //printf("\nData received: %i", nbytes);
-		    //save received data on disk
-		    //FILE* receivedFile;
-		    //receivedFile = fopen("halloReceived.txt", "wb");
-		    //errorhandling TODO
-		    //write file on disk
-		    //fwrite(buffer, nbytes, 1, receivedFile);
-		    //close file 
-		    //fclose(receivedFile); 
-		    //clear the buffer
-		    //bzero(buffer, bufferSize);
-		    //reads a message from stdin and stores it into the buffer
-		    //fgets(buffer,  bufferSize, stdin);
-		    //write
-		    //nbytes = write(newss, buffer, strlen(buffer));
+			
 		    nbytes = saveClientFile(nbytes);
+			
 		    if(nbytes < 0)
 		    {
 			error("Error while writing function");
@@ -311,9 +300,7 @@ int main ( )
 int receiveFileFromClient(){
 	int nbytes;
 	//TODO bzero funktion durch memset ersetzen
-	bzero(buffer, bufferSize);
 	//read filecontent 
-	nbytes = read(newss, buffer, bufferSize);
 	printf("Server received: %s", buffer);
 	if(nbytes < 0)
 	{

@@ -238,7 +238,7 @@ void getFile(char* filename) {
 	printf("got %s from server\n", filename);
 	fflush(stdout);
 }
-// put filecontent in to a char buffer
+//put filecontent in to a char buffer
 //@author PM
 int getFileContent(char* filename, char* content){
 	FILE* fp = fopen(filename, "rb");
@@ -259,12 +259,9 @@ int getFileContent(char* filename, char* content){
 
 	    buffer[i] = c;
 	}
-	
 	fclose(fp);
 	memcpy(content, buffer, size);
-
 	return size;
-	
 }
 
 

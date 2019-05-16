@@ -27,6 +27,9 @@ struct sockaddr_ref {
 
 int s_tcp;	// Main socket descriptor
 struct sockaddr_ref cliaddresses[MAXCLIENTS];   // Store client informations
+int newss;			// socket descriptor
+int maxfd, n;               // Main loop values
+char buffer[MAXDATASIZE];   // buffer
 
 
 // cleanup
@@ -47,9 +50,6 @@ int main ( )
     // Clean up on exit if possible
     atexit(free_sock);
 
-    int newss;			// socket descriptor
-    int maxfd, n;               // Main loop values
-    char buffer[MAXDATASIZE];   // buffer
     struct addrinfo hints;      // getaddrinfo parameters
     struct addrinfo* res;       // getaddrinfo result
     struct addrinfo* p;         // getaddrinfo iteration pointer
@@ -258,23 +258,34 @@ int main ( )
                 }
                 else    // Communication socket, receive data
                 {
+		    //TODO auslagern
 		    int nbytes;
-		    bzero(buffer, bufferSize);
-		    //read
-		    nbytes = read(newss, buffer, bufferSize);
-		    printf("Server received: %s", buffer);
+		    //TODO bzero funktion durch memset ersetzen
+		    //bzero(buffer, bufferSize);
+		    //read filecontent 
+		    //nbytes = read(newss, buffer, bufferSize);
+		    //printf("Server received: %s", buffer);
+		    nbytes = receiveFileFromClient();
 		    if(nbytes < 0)
 		    {
 			error("Error during the read function...");
 		    }
-		    printf("\nData received: %i", nbytes);
-		    printf("\nClient:  %s\n",  buffer);
+		    //printf("\nData received: %i", nbytes);
+		    //save received data on disk
+		    //FILE* receivedFile;
+		    //receivedFile = fopen("halloReceived.txt", "wb");
+		    //errorhandling TODO
+		    //write file on disk
+		    //fwrite(buffer, nbytes, 1, receivedFile);
+		    //close file 
+		    //fclose(receivedFile); 
 		    //clear the buffer
-		    bzero(buffer, bufferSize);
+		    //bzero(buffer, bufferSize);
 		    //reads a message from stdin and stores it into the buffer
-		    fgets(buffer,  bufferSize, stdin);
+		    //fgets(buffer,  bufferSize, stdin);
 		    //write
-		    nbytes = write(newss, buffer, strlen(buffer));
+		    //nbytes = write(newss, buffer, strlen(buffer));
+		    nbytes = saveClientFile(nbytes);
 		    if(nbytes < 0)
 		    {
 			error("Error while writing function");
@@ -288,11 +299,41 @@ int main ( )
                         }
                         break;
                     }
-										//receiving files from clients
                     printf("\n%i bytes received.\n", nbytes);
                     fflush(stdout);
                 }
             }
         }
     }
+}
+
+
+int receiveFileFromClient(){
+	int nbytes;
+	//TODO bzero funktion durch memset ersetzen
+	bzero(buffer, bufferSize);
+	//read filecontent 
+	nbytes = read(newss, buffer, bufferSize);
+	printf("Server received: %s", buffer);
+	if(nbytes < 0)
+	{
+		error("Error during the read function...");
+	}
+	printf("\nData received: %i", nbytes);
+	return nbytes;
+
+}
+
+int saveClientFile(int bytes){
+	//save received data on disk
+	FILE* receivedFile;
+	receivedFile = fopen("halloReceived.txt", "wb");
+	//errorhandling TODO
+	//write file on disk
+	int n = fwrite(buffer, bytes, 1, receivedFile);
+	//close file 
+	fclose(receivedFile); 
+	//clear the buffer
+	bzero(buffer, bufferSize);
+	return n; 
 }

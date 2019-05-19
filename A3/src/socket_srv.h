@@ -3,6 +3,9 @@
 
 
 void free_sock();
-
+int receiveFileFromClient(int);
+int saveClientFile(int bytes);
+int getFileContent(char*, char*);
+int sendFile(char*, int);
 
 #endif

@@ -6,6 +6,9 @@ bool isValidArgument(char*);
 int connectToServer(char*);
 void disconnect();
 void sendFile(char*);
-void getFile(char*);
+int getFileFromServer(char*);
 int getFileContent(char*, char*);
+int sendRequest(char*);
+int saveServerFile(int bytes, char*);
+
 #endif

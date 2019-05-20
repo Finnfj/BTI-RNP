@@ -9,6 +9,6 @@ void sendFile(char*);
 int getFileFromServer(char*);
 int getFileContent(char*, char*);
 int sendRequest(char*);
-int saveServerFile(int bytes, char*);
+int saveServerFile(int , char*, char*);
 
 #endif

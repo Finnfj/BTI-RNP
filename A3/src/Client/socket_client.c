@@ -1,3 +1,10 @@
+/* Client Application
+ * Authors Finn Jannsen & Paul Mathia 
+ * RNP Aufgabe Prof. Dr. Schmidt 
+ *
+ */
+
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -16,7 +23,7 @@
 
 bool connected = false;
 int sockfd;
-char buffer[MAXDATASIZE];   // buffer
+char buffer[MAXDATASIZE];  
 
 int main()
 {   //MAIN LOOP
@@ -119,7 +126,6 @@ int main()
             puts("Unknown command");
             fflush(stdout);
         }
-
         free(linebuf);
         linebuf = NULL;
         free(originalmsg);
@@ -220,7 +226,6 @@ int connectToServer(char* address) {
     }
     // Send hostname
     sendRequest(hostname); */
-    
     return s_tcp;
 }
 
@@ -241,57 +246,69 @@ void disconnect() {
 
 /*
  * Send a file to server
- * //@author PM
- * DONE
  */
 void sendFile(char* filename) {
-
+    int sentbytes = 0;
     printf("Sending %s to Server\n", filename);
     fflush(stdout);
-
+    //send filename to server
+    sentbytes = write(sockfd, filename, bufferSize);
     char filecontent[MAXDATASIZE] = {0};
     int size = getFileContent(filename, filecontent);
-
-    int sentbytes = write(sockfd, filecontent, size);
-
+    //sent filecontent to server
+    sentbytes = write(sockfd, filecontent, size);
+    if(sentbytes < 0){
+	perror("Error during write function..."); 
+        fflush(stdout);
+    }
     printf("%i from %i bytes of data were sent to the Server\n", sentbytes, size);
 }
 
 /*
  * Get a file from server
- * TODO
  */
 int getFileFromServer(char* filename) {
     printf("Requesting following File: %s from Server\n", filename);
     fflush(stdout);
     int nbytes;
-    //printf("\nBufferinhalt in der Funktion getFileFromServer: %s", filename);
     //send Request
     nbytes = write(sockfd, filename, bufferSize);
-    //printf("\nBufferinhalt nach write: %s", buffer);
+    if(nbytes < 0)
+    {
+        perror("Error during the write function...");
+        fflush(stdout);
+    }
     memset(buffer, 0, MAXDATASIZE);
+    //read answer 
+    nbytes = read(sockfd, buffer, bufferSize);
     if(nbytes < 0)
     {
         perror("Error during the read function...");
+        fflush(stdout);
     }
-    nbytes = read(sockfd, buffer, bufferSize);
+    printf("Inhalt von %s = %s\n", filename, buffer);
     printf("Data received: %i bytes\n", nbytes);
-    nbytes = saveServerFile(nbytes, buffer);
+    //calling helpfunction
+    nbytes = saveServerFile(nbytes, filename, buffer);
+    if(nbytes < 0)
+    {
+        perror("Error during saveServerFile function...");
+        fflush(stdout);
+    }    
     return nbytes;
 }
-//put filecontent in to a char buffer
-//@author PM
-//DONE
+
+/*
+ * Getting filecontent 
+ */
 int getFileContent(char* filename, char* content){
     FILE* fp = fopen(filename, "rb");
     int size = 0;
     char buffer[MAXDATASIZE];
     size_t i;
-
     for (i = 0; i < MAXDATASIZE; ++i)
     {
         int c = getc(fp);
-        //TODO errorhandling
         size++;
         if (c == EOF)
         {
@@ -300,35 +317,39 @@ int getFileContent(char* filename, char* content){
         }
         buffer[i] = c;
     }
-
     fclose(fp);
     memcpy(content, buffer, size);
     return size;
 }
 
 /*
- * handshake for telling the server whether its a put or get request
- * @author pm
- * DONE
+ * Request for telling the Server whether its a put or get request
  */
 int sendRequest(char* ch)
 {
     char* flag = ch;
     printf("Client sending following request to the server: %s\n", flag);
     int nbytes = send(sockfd, ch, bufferSize, 0);
-    //printf("\nRequest sent to server");
+    if(nbytes < 0)
+    {
+ 	perror("Error sending request to Server..."); 
+        fflush(stdout);
+    }
 }
 
 /*
  * Save a requested file from Server on disk.
  */
-int saveServerFile(int bytes, char* fileContent){
+int saveServerFile(int bytes, char* filename, char* filecontent){
     //save received data on disk
     FILE* receivedFile;
-    receivedFile = fopen("halloReceivedFromServer.txt", "wb");
-    //errorhandling TODO
+    receivedFile = fopen(filename, "wb");
     //write file on disk
     int n = fwrite(buffer, bytes, 1, receivedFile);
+    if(n < 0){
+	perror("Error writing file..."); 
+        fflush(stdout);
+    }
     //close file
     fclose(receivedFile);
     //clear the buffer

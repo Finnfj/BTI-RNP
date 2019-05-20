@@ -1,3 +1,7 @@
+/* Server Application
+ * Authors Finn Jannsen & Paul Mathia 
+ * RNP Aufgabe Prof. Dr. Schmidt 
+ */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -10,6 +14,7 @@
 #include <netdb.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "socket_srv.h"
 
 #include <sys/select.h>
@@ -28,11 +33,12 @@ struct sockaddr_ref {
     char* hostname;
 };
 
-int s_tcp;	// Main socket descriptor
+int s_tcp;					// Main socket descriptor
 struct sockaddr_ref cliaddresses[MAXCLIENTS];   // Store client informations
-int newss;		    // socket descriptor
-int maxfd, n;               // Main loop values
-char buffer[MAXDATASIZE];   // buffer
+int newss;		    			// socket descriptor
+int maxfd, n;               			// Main loop values
+char buffer[MAXDATASIZE];   			// buffer
+char filenamePut[bufferSize];		
 
 
 // cleanup
@@ -244,21 +250,6 @@ int main ( )
                                 fflush(stderr);
                             }
                             
-                            /* CODE ZUM RECEIVEN VOM HOSTNAME VOM CLIENT DIREKT, FALLS getnameinfo NICHT FUNKTIONIERT
-                            // Save Client's hostname, which is sent following the connect
-                            int nbytes;
-                            memset(buffer, 0, MAXDATASIZE);
-                            nbytes = read(newss, buffer, bufferSize);
-                            if(nbytes < 0) {
-                                perror("Error during the read function...");
-                                fflush(stderr);
-                            }
-                            char* clHostname[nbytes];
-                            strcpy(clHostname, buffer);
-                            cliaddresses[j].hostname = clHostname; 
-                            */
-                            
-                            
                             // Add new socket to our main file descriptor
                             FD_SET(newss, &master);
 
@@ -277,7 +268,7 @@ int main ( )
                     //read requestflag
                     nbytes = read(i, buffer, bufferSize);
                     
-                    // Is read succesful? If this block is entered it would either block (EWOULDBLOCK) OR otherwise most often the client disconnected
+                    // Is read succesful - If this block is entered it would either block (EWOULDBLOCK) OR otherwise most often the client disconnected
                     if (nbytes <= 0) {
                         if (EWOULDBLOCK != errno)
                         {
@@ -289,14 +280,15 @@ int main ( )
 
                     if(strcmp(buffer, "Put") == 0) {
                         printf("Received put request from Client\n");
+                        //Receive file from Client
                         nbytes = receiveFileFromClient(i);
                         if(nbytes < 0)
                         {
                             perror("Error during the read function...");
                             fflush(stderr);
                         }
-                        //save received client file on disk
-                        nbytes = saveClientFile(nbytes);
+                        //Save received Client file on disk
+                        nbytes = saveClientFile(nbytes, buffer);
                         if(nbytes < 0)
                         {
                             perror("Error while writing function");
@@ -307,7 +299,17 @@ int main ( )
                     if(strcmp(buffer, "Get") == 0) {
                         printf("Received get request from Client\n");
                         nbytes = read(i, buffer, bufferSize);
+                        if(nbytes < 0)
+                        {
+                            perror("Error during the read function...");
+                            fflush(stderr);
+                        }
                         nbytes = sendFile(buffer, i);
+                        if(nbytes < 0)
+                        {
+                            perror("Error during the sendFile function...");
+                            fflush(stderr);
+                        }
                         break;
                     }
                     if(strcmp(buffer, "List") == 0) {
@@ -345,7 +347,6 @@ int main ( )
                                     fprintf(stderr, "Error: %s\n", gai_strerror(status)); // gai_strerror is getaddrinfo's Error descriptor
                                     fflush(stderr);
                                 }
-                                
                                 
                                 strcat(listinfo, hostname);
                                 strcat(listinfo, ":");
@@ -393,27 +394,34 @@ int main ( )
 int receiveFileFromClient(int sock){
     int nbytes;
     memset(buffer, 0, MAXDATASIZE);
-    //read filecontent
-    nbytes = read(sock, buffer, bufferSize);
+    memset(filenamePut, 0, MAXDATASIZE);	
+    //readfilename
+    nbytes = read(sock, filenamePut, bufferSize);
+    if(nbytes < 0)
+    {
+        perror("Error during the read function...");
+    }
+    nbytes = read(sock, buffer, bufferSize); 
     if(nbytes < 0)
     {
         perror("Error during the read function...");
     }
     printf("Data received: %i bytes\n", nbytes);
     return nbytes;
-
 }
 
 /*
  * Save a received file from a Client on disk.
  */
-int saveClientFile(int bytes){
+int saveClientFile(int bytes, char* filename){
     //save received data on disk
     FILE* receivedFile;
-    receivedFile = fopen("halloReceived.txt", "wb");
-    //errorhandling TODO
+    receivedFile = fopen(filenamePut, "wb");
     //write file on disk
     int n = fwrite(buffer, bytes, 1, receivedFile);
+    if(n < 0){
+	perror("Error during fwrite function");
+    }
     //close file
     fclose(receivedFile);
     //clear the buffer
@@ -421,18 +429,17 @@ int saveClientFile(int bytes){
     return n;
 }
 
-//put filecontent in to a char buffer
-//@author PM
+/*
+ * Helpfunction for getting Filecontent
+ */
 int getFileContent(char* filename, char* content){
     FILE* fp = fopen(filename, "rb");
     int size = 0;
     char buffer[MAXDATASIZE];
     size_t i;
-
     for (i = 0; i < MAXDATASIZE; ++i)
     {
         int c = getc(fp);
-        //TODO errorhandling
         size++;
         if (c == EOF)
         {
@@ -441,7 +448,6 @@ int getFileContent(char* filename, char* content){
         }
         buffer[i] = c;
     }
-
     fclose(fp);
     memcpy(content, buffer, size);
     return size;
@@ -449,15 +455,20 @@ int getFileContent(char* filename, char* content){
 
 /*
  * Send a requested File to a Client
- * //@author PM
  */
 int sendFile(char* filename, int sock) {
     printf("Sending requested file to client\n");	
     char filecontent[MAXDATASIZE] = {0};
     int size = getFileContent(filename, filecontent);
-
+    if(size < 0){
+	perror("Error during getFileContent function");
+        fflush(stdout);
+    }
     int sentbytes = write(sock, filecontent, size);
-
+    if(sentbytes < 0){
+	perror("Error during write function");
+        fflush(stdout);
+    }
     printf("%i from %i bytes of data were sent\n", sentbytes, size);
     return sentbytes;
 }

@@ -32,7 +32,7 @@ int s_tcp;	// Main socket descriptor
 struct sockaddr_ref cliaddresses[MAXCLIENTS];   // Store client informations
 int newss;		    // socket descriptor
 int maxfd, n;               // Main loop values
-char* buffer[MAXDATASIZE];   // buffer
+char buffer[MAXDATASIZE];   // buffer
 
 
 // cleanup
@@ -204,7 +204,7 @@ int main ( )
                     if (freeslot == 1)
                     {
                         socklen_t cliaddrlen = sizeof(*cliaddrp);
-                        if (-1 == (newss = accept(s_tcp, cliaddrp, &cliaddrlen)))
+                        if (-1 == (newss = accept(s_tcp,(struct sockaddr*) cliaddrp, &cliaddrlen)))
                         {
                             if (EWOULDBLOCK != errno)
                             {
@@ -312,27 +312,40 @@ int main ( )
                     }
                     if(strcmp(buffer, "List") == 0) {
                         printf("Received List request from a Client\n");
-                        nbytes = read(i, buffer, bufferSize);
                         printf("Bufferinhalt in Listzweig nach Read-Aufruf: %s\n", buffer); 
                         
                         char listinfo[MAXDATASIZE] = {0};
                         
                         // Add client informations
                         strcat(listinfo, "Clients connected to Server:\n");
-                        char* hostname[50];
-                        char* port[10];
+                        char hostname[50];
+                        char port[10];
                         for (int j=0; j < MAXCLIENTS; j++) {
                             if (cliaddresses[j].occupied) {
                                 cliaddrp = &cliaddresses[j].cliaddr;
                                 struct sockaddr* q = (struct sockaddr*)  cliaddrp;
                                 
-                                // Get client hostname
-                                if (-1 == getnameinfo(q, sizeof(q), hostname, sizeof(hostname), NULL, NULL, 0)) {
-                                    perror("Error while getting hostname");
+                                // Get client port directly from struct and calculate sockaddr size
+                                int hostaddrlen;
+                                if(q->sa_family == AF_INET) {
+                                    // Read client port
+                                    sprintf(port, "%d", ((struct sockaddr_in*)(q))->sin_port);
+                                    // Calc sockaddr size
+                                    hostaddrlen = sizeof(struct sockaddr_in);
+                                } else {    // AF_INET6
+                                    // Read client port
+                                    sprintf(port, "%d", ((struct sockaddr_in6*)(q))->sin6_port);
+                                    // Calc sockaddr size
+                                    hostaddrlen = sizeof(struct sockaddr_in6);
+                                }
+                                
+                                int status = 0;
+                                status = getnameinfo(q, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);
+                                if (0 != status) {
+                                    fprintf(stderr, "Error: %s\n", gai_strerror(status)); // gai_strerror is getaddrinfo's Error descriptor
                                     fflush(stderr);
                                 }
-                                // Read client port
-                                sprintf(port, "%d", ((struct sockaddr_in*)(q))->sin_port);
+                                
                                 
                                 strcat(listinfo, hostname);
                                 strcat(listinfo, ":");
@@ -359,6 +372,7 @@ int main ( )
                             closedir(d);
                         }
                         
+                        printf("%s", listinfo); 
                         // Send informations to client
                         write(i, listinfo, sizeof(listinfo));
                         break;
@@ -383,7 +397,7 @@ int receiveFileFromClient(int sock){
     nbytes = read(sock, buffer, bufferSize);
     if(nbytes < 0)
     {
-        error("Error during the read function...");
+        perror("Error during the read function...");
     }
     printf("Data received: %i bytes\n", nbytes);
     return nbytes;

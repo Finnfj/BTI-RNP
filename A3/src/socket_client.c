@@ -77,6 +77,12 @@ int main()
             // set list request to server
             char* list = "List";
             sendRequest(list);
+            int nbytes = read(sockfd, buffer, bufferSize);
+            if(nbytes < 0)
+            {
+                perror("Error during the read function...");
+            }
+            printf("%s", buffer); 
         }
             else if(strcmp(linebuf, "Put") == 0) {
             // set put information to server

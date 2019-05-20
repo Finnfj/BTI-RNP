@@ -19,7 +19,6 @@
 
 #define SRV_PORT "4715"
 #define MAXDATASIZE 1000
-#define bufferSize 255
 
 bool connected = false;
 int sockfd;
@@ -84,7 +83,7 @@ int main()
             // set list request to server
             char* list = "List";
             sendRequest(list);
-            int nbytes = read(sockfd, buffer, bufferSize);
+            int nbytes = read(sockfd, buffer, MAXDATASIZE);
             if(nbytes < 0)
             {
                 perror("Error during the read function...");
@@ -216,16 +215,6 @@ int connectToServer(char* address) {
     }
     // Connection complete, free addrinfo memory
     freeaddrinfo(res);
-    
-    /* CODE ZUM SENDEN VOM HOSTNAME VOM CLIENT DIREKT, FALLS getnameinfo NICHT FUNKTIONIERT
-    // Tell Server our hostname
-    char hostname[50];
-    if (-1 == gethostname(&hostname, sizeof(hostname))) {
-        perror("Couldn't get hostname");
-        fflush(stderr);
-    }
-    // Send hostname
-    sendRequest(hostname); */
     return s_tcp;
 }
 
@@ -252,7 +241,7 @@ void sendFile(char* filename) {
     printf("Sending %s to Server\n", filename);
     fflush(stdout);
     //send filename to server
-    sentbytes = write(sockfd, filename, bufferSize);
+    sentbytes = write(sockfd, filename, MAXDATASIZE);
     char filecontent[MAXDATASIZE] = {0};
     int size = getFileContent(filename, filecontent);
     //sent filecontent to server
@@ -272,7 +261,7 @@ int getFileFromServer(char* filename) {
     fflush(stdout);
     int nbytes;
     //send Request
-    nbytes = write(sockfd, filename, bufferSize);
+    nbytes = write(sockfd, filename, MAXDATASIZE);
     if(nbytes < 0)
     {
         perror("Error during the write function...");
@@ -280,7 +269,7 @@ int getFileFromServer(char* filename) {
     }
     memset(buffer, 0, MAXDATASIZE);
     //read answer 
-    nbytes = read(sockfd, buffer, bufferSize);
+    nbytes = read(sockfd, buffer, MAXDATASIZE);
     if(nbytes < 0)
     {
         perror("Error during the read function...");
@@ -329,10 +318,10 @@ int sendRequest(char* ch)
 {
     char* flag = ch;
     printf("Client sending following request to the server: %s\n", flag);
-    int nbytes = send(sockfd, ch, bufferSize, 0);
+    int nbytes = send(sockfd, ch, MAXDATASIZE, 0);
     if(nbytes < 0)
     {
- 	perror("Error sending request to Server..."); 
+        perror("Error sending request to Server..."); 
         fflush(stdout);
     }
 }
@@ -347,7 +336,7 @@ int saveServerFile(int bytes, char* filename, char* filecontent){
     //write file on disk
     int n = fwrite(buffer, bytes, 1, receivedFile);
     if(n < 0){
-	perror("Error writing file..."); 
+        perror("Error writing file..."); 
         fflush(stdout);
     }
     //close file

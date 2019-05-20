@@ -23,7 +23,6 @@
 #define SRV_PORT "4715"
 #define MAXDATASIZE 1000
 #define MAXCLIENTS  5
-#define bufferSize 255
 
 // manage client addresses
 struct sockaddr_ref {
@@ -38,7 +37,7 @@ struct sockaddr_ref cliaddresses[MAXCLIENTS];   // Store client informations
 int newss;		    			// socket descriptor
 int maxfd, n;               			// Main loop values
 char buffer[MAXDATASIZE];   			// buffer
-char filenamePut[bufferSize];		
+char filenamePut[MAXDATASIZE];		
 
 
 // cleanup
@@ -177,9 +176,6 @@ int main ( )
             return -1;
         }
 
-        printf("No of ready descriptor: %d\n", n);
-        fflush(stdout);
-
         // iterate socket fds and work with them
         for (int i=0; i<=maxfd && n>0; i++)
         {
@@ -266,16 +262,40 @@ int main ( )
                     int nbytes;
                     memset(buffer, 0, MAXDATASIZE);
                     //read requestflag
-                    nbytes = read(i, buffer, bufferSize);
+                    nbytes = read(i, buffer, MAXDATASIZE);
                     
                     // Is read succesful - If this block is entered it would either block (EWOULDBLOCK) OR otherwise most often the client disconnected
-                    if (nbytes <= 0) {
-                        if (EWOULDBLOCK != errno)
-                        {
-                            perror("Error different than expected EWOULDBLOCK errno occured");
-                            fflush(stderr);
+                    if (nbytes < 0) {
+                        switch (errno) {
+                            case EWOULDBLOCK: break;// Is expected because read is blocking
+                            case ECONNRESET:
+                                // Client on socket i reset connection, remove from list
+                                for (int j=0; j < MAXCLIENTS; j++) {
+                                    if (cliaddresses[j].socknum == i) {
+                                        // Make space for new entries
+                                        cliaddresses[j].occupied = false;
+                                        // Is this the highest fd number?
+                                        if (i == maxfd) {
+                                            // set maxfd to highest fd integral we use anywhere
+                                            int tmaxfd = s_tcp;
+                                            for (int z=0; z < MAXCLIENTS; z++) {
+                                                if (cliaddresses[z].occupied && cliaddresses[z].socknum > tmaxfd && z != i) {
+                                                    tmaxfd = cliaddresses[z].socknum;
+                                                }
+                                            }
+                                            maxfd = tmaxfd;
+                                        }
+                                        // Close socket
+                                        close(cliaddresses[j].socknum);
+                                        // Clear from fd set
+                                        FD_CLR(i, &master);
+                                        printf("Client on sockfd %d disconnected", i);
+                                    }
+                                } break;
+                            default:
+                                perror("Error different than expected EWOULDBLOCK errno occured");
+                                fflush(stderr);
                         }
-                        break;
                     }
 
                     if(strcmp(buffer, "Put") == 0) {
@@ -298,7 +318,7 @@ int main ( )
 
                     if(strcmp(buffer, "Get") == 0) {
                         printf("Received get request from Client\n");
-                        nbytes = read(i, buffer, bufferSize);
+                        nbytes = read(i, buffer, MAXDATASIZE);
                         if(nbytes < 0)
                         {
                             perror("Error during the read function...");
@@ -380,7 +400,7 @@ int main ( )
                     }
                     //printf("\n%i bytes received.\n", nbytes);
                     fflush(stdout);
-                    bzero(buffer, bufferSize);
+                    bzero(buffer, MAXDATASIZE);
                 }
             }
         }
@@ -396,12 +416,12 @@ int receiveFileFromClient(int sock){
     memset(buffer, 0, MAXDATASIZE);
     memset(filenamePut, 0, MAXDATASIZE);	
     //readfilename
-    nbytes = read(sock, filenamePut, bufferSize);
+    nbytes = read(sock, filenamePut, MAXDATASIZE);
     if(nbytes < 0)
     {
         perror("Error during the read function...");
     }
-    nbytes = read(sock, buffer, bufferSize); 
+    nbytes = read(sock, buffer, MAXDATASIZE); 
     if(nbytes < 0)
     {
         perror("Error during the read function...");

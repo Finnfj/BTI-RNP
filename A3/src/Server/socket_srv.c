@@ -1,7 +1,12 @@
-/* Server Application
- * Authors Finn Jannsen & Paul Mathia 
- * RNP Aufgabe Prof. Dr. Schmidt 
+/**Socket Server Application [RNP Aufgabe 3 Prof. Dr. Schmidt]
+ * -----------------------------------
+ * Authors: Finn Jannsen & Paul Mathia 
+ * Version: 1.0
+ * Description:
+ * This is a simple C socket server able to send and get files to/from a corresponding client and handle up to 5 clients
+ * It supports both IPv4/6 connections.
  */
+ 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>

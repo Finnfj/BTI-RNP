@@ -4,8 +4,12 @@
 
 void free_sock();
 int receiveFileFromClient(int);
-int saveClientFile(int, char*);
-int getFileContent(char*, char*);
+int saveFile(int, char*);
+int readFileContent(char*, char*);
 int sendFile(char*, int);
+void removeClient(int);
+int writeSocket(char*, int);
+int readSocket(int);
+int listInformations(char*);
 
 #endif

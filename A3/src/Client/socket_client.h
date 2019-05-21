@@ -5,10 +5,12 @@
 bool isValidArgument(char*);
 int connectToServer(char*);
 void disconnect();
-void sendFile(char*);
-int getFileFromServer(char*);
-int getFileContent(char*, char*);
+int sendFile(char*);
+int getFile(char*);
+int readFileContent(char*, char*);
 int sendRequest(char*);
-int saveServerFile(int , char*, char*);
+int saveFile(int, char*);
+int writeSocket(char*);
+int readSocket();
 
 #endif

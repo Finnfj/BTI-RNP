@@ -1,7 +1,10 @@
-/* Client Application
- * Authors Finn Jannsen & Paul Mathia 
- * RNP Aufgabe Prof. Dr. Schmidt 
- *
+/**Socket Client Application [RNP Aufgabe 3 Prof. Dr. Schmidt]
+ * -----------------------------------
+ * Authors: Finn Jannsen & Paul Mathia 
+ * Version: 1.0
+ * Description:
+ * This is a simple C socket client able to send and get files to/from a corresponding server.
+ * It supports both IPv4/6 connections.
  */
 
 
@@ -17,15 +20,22 @@
 #include <string.h>
 #include "socket_client.h"
 
-#define SRV_PORT "4715"
+#define SRV_PORT    "4715"
 #define MAXDATASIZE 1000
+#define PUT_C       "Put"
+#define GET_C       "Get"
+#define LIST_C      "List"
 
+// Global values
 bool connected = false;
 int sockfd;
 char buffer[MAXDATASIZE];  
 
+/**
+ * Main loop. Read input and act accordingly
+ */
 int main()
-{   //MAIN LOOP
+{   
     while(1)
     {
         char* linebuf = NULL;
@@ -48,22 +58,21 @@ int main()
         fflush(stdout);
 
         char* nextToken = NULL;
-        char* originalmsg = malloc(strlen(linebuf));
-        //save the originalmsg from linebuf
-        strcpy(originalmsg, linebuf);
         //getfirst token and the delimiter is: " "
         nextToken = strtok(linebuf, " ");
 
         // Check what command was entered
-        if(strcmp(linebuf, "Connect") == 0) {
+        if(strcmp(linebuf, "Connect") == 0 || strcmp(linebuf, "connect") == 0) {
             // Connect if we aren't, do nothing otherwise
             if (connected) {
                 fprintf(stderr, "We are already connected\n");
                 fflush(stderr);
-            } else {
+            } 
+            else {
                 // Get second argument (address)
                 nextToken = strtok(NULL, " ");
                 if (isValidArgument(nextToken)) {
+                    // Try connecting to server
                     sockfd = connectToServer(nextToken);
                     if (sockfd == -1) {
                         fprintf(stderr, "Connection was refused.\n");
@@ -74,67 +83,68 @@ int main()
                         fflush(stdout);
                     }
                 } else {
-                    fprintf(stderr, "Argument missing\n");
+                    fprintf(stderr, "Argument missing\n\n");
                     fflush(stderr);
                 }
             }
         } 
-	    else if(strcmp(linebuf, "List") == 0) {
+	    else if(strcmp(linebuf, "List") == 0 || strcmp(linebuf, "list") == 0) {
             // set list request to server
-            char* list = "List";
-            sendRequest(list);
-            int nbytes = read(sockfd, buffer, MAXDATASIZE);
-            if(nbytes < 0)
-            {
-                perror("Error during the read function...");
+            sendRequest(LIST_C);
+            
+            // read response
+            if (-1 == readSocket()) {
+                fprintf(stderr, "Couldn't read 'List' response\n");
+                fflush(stderr);
+            } else {
+                printf("\n%s", buffer); 
             }
-            printf("%s", buffer); 
         }
-            else if(strcmp(linebuf, "Put") == 0) {
+        else if(strcmp(linebuf, "Put") == 0 || strcmp(linebuf, "put") == 0) {
             // set put information to server
-            char* put = "Put";
-            sendRequest(put);
-            // Get second argument (file)
+            sendRequest(PUT_C);
+            
+            // Get second argument (filename)
             nextToken = strtok(NULL, " ");
             if(isValidArgument(nextToken)) {
                 //sending a file to server
                 sendFile(nextToken);
             } else {
-                fprintf(stderr, "Argument missing\n");
+                fprintf(stderr, "Argument missing\n\n");
                 fflush(stderr);
             }
         }
-        else if (strcmp(linebuf, "Get") == 0){
+        else if (strcmp(linebuf, "Get") == 0 || strcmp(linebuf, "get") == 0){
             //send get information to server
-            char* get = "Get";
-            sendRequest(get);
-            // Get second argument (file)
+            sendRequest(GET_C);
+            
+            // Get second argument (filename)
             nextToken = strtok(NULL, " ");
             if(isValidArgument(nextToken)) {
                 //getting file from server
-                getFileFromServer(nextToken);
+                getFile(nextToken);
             } else {
-                fprintf(stderr, "Argument missing\n");
+                fprintf(stderr, "Argument missing\n\n");
                 fflush(stderr);
             }
-        } else if (strcmp(linebuf, "Quit") == 0) {
+        } else if (strcmp(linebuf, "Quit") == 0 || strcmp(linebuf, "quit") == 0) {
             // Disconnect and quit program
             disconnect();
             exit(EXIT_SUCCESS);
         } else {
-            puts("Unknown command");
+            puts("Unknown command\n\n");
             fflush(stdout);
         }
         free(linebuf);
         linebuf = NULL;
-        free(originalmsg);
-        originalmsg = NULL;
     }
 }
 
 
-/*
+/**
  * Check if argument is not null or length 0
+ * @param string to check
+ * @return true means valid string, false invalid
  */
 bool isValidArgument(char* str)
 {
@@ -142,8 +152,192 @@ bool isValidArgument(char* str)
     return valid;
 }
 
-/*
+
+/**
+ * Send a file to server
+ * @param filename name of the file. It has to be in the program directory
+ */
+int sendFile(char* filename) {
+    printf("Sending %s to Server\n", filename);
+    
+    // send filename to server
+    if (-1 == writeSocket(filename)) {
+        fprintf(stderr, "Couldn't write filename to socket\n");
+        fflush(stderr);
+        return -1;
+    }
+    
+    // open file
+    char filecontent[MAXDATASIZE] = {0};
+    int size = readFileContent(filename, filecontent);
+    
+    // send filecontent to server
+    if (-1 == writeSocket(filecontent)) {
+        fprintf(stderr, "Couldn't write filecontent to socket\n");
+        fflush(stderr);
+        return -1;
+    }
+    
+    printf("%i bytes of data were sent to the Server\n\n", size);
+    fflush(stdout);
+    return 0;
+}
+
+/**
+ * Get a file from server
+ * @param filename name of the file. It has to be in the server directory
+ */
+int getFile(char* filename) {
+    printf("Requesting following File: %s from Server\n", filename);
+    fflush(stdout);
+    
+    //send filename to server
+    if (-1 == writeSocket(filename)) {
+        fprintf(stderr, "Couldn't write filename to socket\n");
+        fflush(stderr);
+        return -1;
+    }
+    
+    // read file
+    int nbytes = readSocket();
+    if (-1 == nbytes) {
+        fprintf(stderr, "Couldn't read file from socket\n");
+        fflush(stderr);
+        return -1;
+    }
+    
+    int size;
+    for (size = 0; size < MAXDATASIZE; size++) {
+        if (buffer[size] == 0x00) {
+            break;
+        }
+    }
+    
+    // display content
+    printf("\nData received: %i bytes\n", size);
+    printf("\nContent of %s = \n%s\n", filename, buffer);
+    
+    // save file
+    if (-1 == saveFile(nbytes, filename)) {
+        fprintf(stderr, "Couldn't save file\n");
+        fflush(stderr);
+        return -1;
+    }
+    
+    return 0;
+}
+
+/**
+ * Read filecontent into a buffer
+ * @param filename name of the file. It has to be in the program directory
+ * @param content buffer to put the filecontent into
+ * @return size of the file
+ */
+int readFileContent(char* filename, char* buf){
+    FILE* fp = fopen(filename, "rb");
+    int i;
+    int c;
+    
+    for (i = 0; i < MAXDATASIZE; ++i)
+    {
+        c = getc(fp);
+        if (c == EOF)
+        {
+            buf[i] = 0x00;
+            break;
+        }
+        buf[i] = c;
+    }
+    
+    fclose(fp);
+    return i;
+}
+
+/**
+ * Send a request to the server
+ * @param ch request to send
+ * @return 0 on success. -1 on failure
+ */
+int sendRequest(char* ch)
+{
+    char* flag = ch;
+    printf("\nClient sending following request to the server: %s\n", flag);
+    int nbytes = send(sockfd, ch, MAXDATASIZE, 0);
+    if(nbytes < 0)
+    {
+        perror("Error sending request to Server..."); 
+        fflush(stderr);
+        return -1;
+    }
+    
+    return 0;
+}
+
+/**
+ * Save a requested file from Server on disk.
+ * @param bytes size of the file in buffer
+ * @param filename name of the file it is saved to
+ * @return 0 on success. -1 on failure
+ */
+int saveFile(int bytes, char* filename){
+    // create file
+    FILE* receivedFile;
+    receivedFile = fopen(filename, "wb");
+    
+    // write file
+    int n = fwrite(buffer, bytes, 1, receivedFile);
+    if(n < 0){
+        perror("Error writing file..."); 
+        fflush(stderr);
+        return -1;
+    }
+    
+    //close file
+    fclose(receivedFile);
+    
+    //clear the buffer
+    memset(buffer, 0, MAXDATASIZE);
+    return 0;
+}
+
+/**
+ * Save a requested file from Server on disk.
+ * @param pl buffer from which is written
+ * @return 0 on success. -1 on failure
+ */
+int writeSocket(char* pl) {
+    int sentbytes = write(sockfd, pl, MAXDATASIZE);
+    if(sentbytes < 0){
+        perror("Error during write()..."); 
+        fflush(stderr);
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * Read from socket.
+ * @return 0 on success. -1 on failure
+ */
+int readSocket() {
+    // clear buffer
+    memset(buffer, 0, MAXDATASIZE); 
+    
+    int nbytes = read(sockfd, buffer, MAXDATASIZE);
+    if(nbytes < 0)
+    {
+        perror("Error during the read()...");
+        fflush(stderr);
+        return -1;
+    } else {
+        return nbytes;
+    }
+}
+
+/**
  * Connect to a server with the given address
+ * @param address IP or hostname of the server socket to connect to
+ * @return server socket fd or error code -1
  */
 int connectToServer(char* address) {
     int s_tcp;			 // socket descriptor
@@ -218,7 +412,7 @@ int connectToServer(char* address) {
     return s_tcp;
 }
 
-/*
+/**
  * Disconnect from server
  */
 void disconnect() {
@@ -230,118 +424,4 @@ void disconnect() {
         puts("We aren't connected");
         fflush(stdout);
     }
-}
-
-
-/*
- * Send a file to server
- */
-void sendFile(char* filename) {
-    int sentbytes = 0;
-    printf("Sending %s to Server\n", filename);
-    fflush(stdout);
-    //send filename to server
-    sentbytes = write(sockfd, filename, MAXDATASIZE);
-    char filecontent[MAXDATASIZE] = {0};
-    int size = getFileContent(filename, filecontent);
-    //sent filecontent to server
-    sentbytes = write(sockfd, filecontent, size);
-    if(sentbytes < 0){
-	perror("Error during write function..."); 
-        fflush(stdout);
-    }
-    printf("%i from %i bytes of data were sent to the Server\n", sentbytes, size);
-}
-
-/*
- * Get a file from server
- */
-int getFileFromServer(char* filename) {
-    printf("Requesting following File: %s from Server\n", filename);
-    fflush(stdout);
-    int nbytes;
-    //send Request
-    nbytes = write(sockfd, filename, MAXDATASIZE);
-    if(nbytes < 0)
-    {
-        perror("Error during the write function...");
-        fflush(stdout);
-    }
-    memset(buffer, 0, MAXDATASIZE);
-    //read answer 
-    nbytes = read(sockfd, buffer, MAXDATASIZE);
-    if(nbytes < 0)
-    {
-        perror("Error during the read function...");
-        fflush(stdout);
-    }
-    printf("Inhalt von %s = %s\n", filename, buffer);
-    printf("Data received: %i bytes\n", nbytes);
-    //calling helpfunction
-    nbytes = saveServerFile(nbytes, filename, buffer);
-    if(nbytes < 0)
-    {
-        perror("Error during saveServerFile function...");
-        fflush(stdout);
-    }    
-    return nbytes;
-}
-
-/*
- * Getting filecontent 
- */
-int getFileContent(char* filename, char* content){
-    FILE* fp = fopen(filename, "rb");
-    int size = 0;
-    char buffer[MAXDATASIZE];
-    size_t i;
-    for (i = 0; i < MAXDATASIZE; ++i)
-    {
-        int c = getc(fp);
-        size++;
-        if (c == EOF)
-        {
-            buffer[i] = 0x00;
-            break;
-        }
-        buffer[i] = c;
-    }
-    fclose(fp);
-    memcpy(content, buffer, size);
-    return size;
-}
-
-/*
- * Request for telling the Server whether its a put or get request
- */
-int sendRequest(char* ch)
-{
-    char* flag = ch;
-    printf("Client sending following request to the server: %s\n", flag);
-    int nbytes = send(sockfd, ch, MAXDATASIZE, 0);
-    if(nbytes < 0)
-    {
-        perror("Error sending request to Server..."); 
-        fflush(stdout);
-    }
-}
-
-/*
- * Save a requested file from Server on disk.
- */
-int saveServerFile(int bytes, char* filename, char* filecontent){
-    //save received data on disk
-    FILE* receivedFile;
-    receivedFile = fopen(filename, "wb");
-    //write file on disk
-    int n = fwrite(buffer, bytes, 1, receivedFile);
-    if(n < 0){
-        perror("Error writing file..."); 
-        fflush(stdout);
-    }
-    //close file
-    fclose(receivedFile);
-    //clear the buffer
-    memset(buffer, 0, MAXDATASIZE);
-    return n;
 }

@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include "socket_srv.h"
 
 #include <sys/select.h>
@@ -78,7 +79,7 @@ int main ( )
     memset(&hints, 0, sizeof(hints));
 
     // either IPv4/IPv6
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET6;
     // TCP only
     hints.ai_socktype = SOCK_STREAM;
     // Host
@@ -303,9 +304,12 @@ int main ( )
                             fflush(stderr);
                             break;
                         }
+                        // store filename
+                        char filename[nbytes];
+                        strncpy(filename, buffer, nbytes);
                         
                         // send the file
-                        nbytes = sendFile(buffer, i);
+                        nbytes = sendFile(filename, i);
                         if (-1 == nbytes) {
                             fprintf(stderr, "Couldn't send file\n");
                             fflush(stderr);
@@ -343,7 +347,6 @@ int main ( )
  */
 int receiveFileFromClient(int sockfd){
     int nbytes;
-    memset(buffer, 0, MAXDATASIZE);
     
     // read file metadata
     nbytes = readSocket(sockfd);
@@ -352,11 +355,15 @@ int receiveFileFromClient(int sockfd){
         fflush(stderr);
         return -1;
     }
-    
-    // store file metadata
-    char filename[nbytes];
-    strncpy(filename, buffer, nbytes);
-    memset(buffer, 0, MAXDATASIZE);
+    // take out header (size)
+    char* ptr;
+    ptr = strtok(buffer, "!");
+    int size;
+    size = atoi(ptr);
+    // store filename
+    ptr = strtok(NULL, "!");
+    char filename[strlen(ptr)];
+    strcpy(filename, ptr);
     
     // read actual file
     nbytes = readSocket(sockfd);
@@ -364,13 +371,6 @@ int receiveFileFromClient(int sockfd){
         fprintf(stderr, "Couldn't read file from socket\n");
         fflush(stderr);
         return -1;
-    }
-    
-    int size;
-    for (size = 0; size < MAXDATASIZE; size++) {
-        if (buffer[size] == 0x00) {
-            break;
-        }
     }
     
     printf("Data received: %i bytes\n", size);
@@ -385,7 +385,7 @@ int receiveFileFromClient(int sockfd){
 }
 
 /**
- * Save a requested file from Server on disk.
+ * Save a file on disk.
  * @param bytes size of the file in buffer
  * @param filename name of the file it is saved to
  * @return 0 on success. -1 on failure
@@ -415,14 +415,16 @@ int saveFile(int bytes, char* filename){
  * Read filecontent into a buffer
  * @param filename name of the file. It has to be in the program directory
  * @param content buffer to put the filecontent into
+ * @param size size of the buffer
  * @return size of the file
  */
-int readFileContent(char* filename, char* buf){
+int readFileContent(char* filename, char* buf, int size){
+    memset(buf, 0, size);
     FILE* fp = fopen(filename, "rb");
     int i;
     int c;
     
-    for (i = 0; i < MAXDATASIZE; ++i)
+    for (i = 0; i < size; ++i)
     {
         c = getc(fp);
         if (c == EOF)
@@ -438,25 +440,35 @@ int readFileContent(char* filename, char* buf){
 }
 
 /**
- * Send a file to server
+ * Send a file to client
  * @param filename name of the file. It has to be in the program directory
  * @param sockfd client sockfd
  */
 int sendFile(char* filename, int sockfd) {
     printf("Sending %s to Client\n", filename);
     
+    // print data attributes into buffer
+    printdatainfo(filename);
+    
+    // send file information to client
+    if (-1 == writeSocket(buffer, sockfd)) {
+        fprintf(stderr, "Couldn't write file information to socket\n");
+        fflush(stderr);
+        return -1;
+    }
+    
     // open file
     char filecontent[MAXDATASIZE] = {0};
-    int size = readFileContent(filename, filecontent);
+    int size = readFileContent(filename, filecontent, MAXDATASIZE);
     
-    // send filecontent to server
+    // send filecontent to client
     if (-1 == writeSocket(filecontent, sockfd)) {
         fprintf(stderr, "Couldn't write filecontent to socket\n");
         fflush(stderr);
         return -1;
     }
     
-    printf("%i bytes of data were sent to the Server\n\n", size);
+    printf("%i bytes of data were sent to the Client\n\n", size);
     fflush(stdout);
     return 0;
 }
@@ -588,6 +600,36 @@ int listInformations(char* buf) {
             strcat(buf, "\n");
         }
         closedir(d);
+    }
+    
+    return 0;
+}
+
+/**
+ * Prints a string into the buffer which contains following information of a file "path" in the current server directory:
+ * size as header
+ * last modified time of a file
+ * size of a file
+ *
+ * @param path path of file
+ * @return 0 on success. -1 on failure
+ */
+int printdatainfo(char* path)
+{
+    struct stat attributes;
+    
+    if(stat(path, &attributes) != 0) {
+        fprintf(stderr, "There was an error accessing '%s' or it doesn't exist.\n", path);
+        fflush(stderr);
+        return -1;
+    }
+    else {
+        // format file timestamp
+        char timestamp[36];
+        strftime(timestamp, 36, "%d.%m.%Y %H:%M:%S", localtime(&attributes.st_atime));
+        // format string
+        memset(buffer, 0, MAXDATASIZE); 
+        sprintf(buffer,"%ld!File '%s' was last modified: %s\nSize of '%s': %ld Bytes\n", attributes.st_size, path, timestamp, path, attributes.st_size); 
     }
     
     return 0;

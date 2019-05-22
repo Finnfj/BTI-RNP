@@ -10,6 +10,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -159,20 +160,29 @@ bool isValidArgument(char* str)
  */
 int sendFile(char* filename) {
     printf("Sending %s to Server\n", filename);
+    char filebuf[MAXDATASIZE] = {0};
     
-    // send filename to server
-    if (-1 == writeSocket(filename)) {
-        fprintf(stderr, "Couldn't write filename to socket\n");
+    // add filesize as header
+    struct stat attributes;
+    if(stat(filename, &attributes) != 0) {
+        fprintf(stderr, "There was an error accessing '%s' or it doesn't exist.\n", filename);
+        fflush(stderr);
+        return -1;
+    }
+    sprintf(filebuf, "%ld!%s", attributes.st_size, filename);
+    
+    // send file metadata to server
+    if (-1 == writeSocket(filebuf)) {
+        fprintf(stderr, "Couldn't write file metadata to socket\n");
         fflush(stderr);
         return -1;
     }
     
     // open file
-    char filecontent[MAXDATASIZE] = {0};
-    int size = readFileContent(filename, filecontent);
+    int size = readFileContent(filename, filebuf, MAXDATASIZE);
     
     // send filecontent to server
-    if (-1 == writeSocket(filecontent)) {
+    if (-1 == writeSocket(filebuf)) {
         fprintf(stderr, "Couldn't write filecontent to socket\n");
         fflush(stderr);
         return -1;
@@ -198,19 +208,28 @@ int getFile(char* filename) {
         return -1;
     }
     
-    // read file
+    // read file information
     int nbytes = readSocket();
+    if (-1 == nbytes) {
+        fprintf(stderr, "Couldn't read file information from socket\n");
+        fflush(stderr);
+        return -1;
+    }
+    // take out header (size)
+    char* ptr;
+    ptr = strtok(buffer, "!");
+    int size;
+    size = atoi(ptr);
+    // print information
+    ptr = strtok(NULL, "!");
+    printf("\n%s\n", ptr);
+    
+    // read file
+    nbytes = readSocket();
     if (-1 == nbytes) {
         fprintf(stderr, "Couldn't read file from socket\n");
         fflush(stderr);
         return -1;
-    }
-    
-    int size;
-    for (size = 0; size < MAXDATASIZE; size++) {
-        if (buffer[size] == 0x00) {
-            break;
-        }
     }
     
     // display content
@@ -218,7 +237,7 @@ int getFile(char* filename) {
     printf("\nContent of %s = \n%s\n", filename, buffer);
     
     // save file
-    if (-1 == saveFile(nbytes, filename)) {
+    if (-1 == saveFile(size, filename)) {
         fprintf(stderr, "Couldn't save file\n");
         fflush(stderr);
         return -1;
@@ -231,14 +250,16 @@ int getFile(char* filename) {
  * Read filecontent into a buffer
  * @param filename name of the file. It has to be in the program directory
  * @param content buffer to put the filecontent into
+ * @param size size of the buffer
  * @return size of the file
  */
-int readFileContent(char* filename, char* buf){
+int readFileContent(char* filename, char* buf, int size){
+    memset(buf, 0, size);
     FILE* fp = fopen(filename, "rb");
     int i;
     int c;
     
-    for (i = 0; i < MAXDATASIZE; ++i)
+    for (i = 0; i < size; ++i)
     {
         c = getc(fp);
         if (c == EOF)

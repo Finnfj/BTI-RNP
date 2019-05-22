@@ -7,7 +7,7 @@ int connectToServer(char*);
 void disconnect();
 int sendFile(char*);
 int getFile(char*);
-int readFileContent(char*, char*);
+int readFileContent(char*, char*, int);
 int sendRequest(char*);
 int saveFile(int, char*);
 int writeSocket(char*);

@@ -372,24 +372,35 @@ int receiveFileFromClient(int sockfd){
         fflush(stderr);
         return -1;
     }
-    
-    // TODO
-    // send response
-    memset(buffer, 0, MAXDATASIZE); 
-    char hostname[50];
-    char ip[20];
-    char date[20];
-    int status = 0;
-    status = getnameinfo(, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);
-    if (0 != status) {
-	fprintf(stderr, "Error: %s\n", gai_strerror(status)); // gai_strerror is getaddrinfo's Error descriptor
-	fflush(stderr);
-	return -1;
-    }
-    sprintf(buffer, "OK %s, %s, %s", hostname, ip, date);
-    
+    //print received data informations
     printf("Data received: %i bytes\n", size);
-    
+    // send serverInformations to client 
+    memset(buffer, 0, MAXDATASIZE); 
+    char serverName[MAXDATASIZE];
+    char* serverIp;
+    char serverInfo[MAXDATASIZE];
+    char timeStamp[MAXDATASIZE];
+    time_t t;
+    struct tm* ts;
+    t = time(NULL);
+    ts = localtime(&t);
+    sprintf(timeStamp, "%s", asctime(ts));
+    struct hostent* host_entry;
+    if (gethostname(serverName, MAXDATASIZE) == -1) {
+	//error
+    }
+    host_entry = gethostbyname(serverName);
+    serverIp = inet_ntoa(*((struct in_addr*) host_entry->h_addr_list[0]));
+    size_t hostIPSize = strnlen(serverIp, MAXDATASIZE);
+    //Daten zusammenfügen und abschicken 
+    strcat(serverInfo, "Server Response: OK, ");
+    strcat(serverInfo, serverName);
+    strcat(serverInfo, " ");
+    strcat(serverInfo, serverIp);
+    strcat(serverInfo, " ");
+    strcat(serverInfo, timeStamp);
+    //dem client schicken
+    write(sockfd, serverInfo, MAXDATASIZE);
     // save file
     if (-1 == saveFile(size, filename)) {
         fprintf(stderr, "Couldn't save file\n");

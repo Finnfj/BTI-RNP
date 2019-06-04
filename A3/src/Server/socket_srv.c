@@ -559,11 +559,13 @@ int listInformations(char* buf) {
             if(q->sa_family == AF_INET) {
                 // Read client port
                 sprintf(port, "%d", ((struct sockaddr_in*)(q))->sin_port);
+		fprintf(stdout, "PORT: %s\n", port);         
                 // Calc sockaddr size
                 hostaddrlen = sizeof(struct sockaddr_in);
             } else {    // AF_INET6
                 // Read client port
                 sprintf(port, "%d", ((struct sockaddr_in6*)(q))->sin6_port);
+		fprintf(stdout, "PORT: %s\n", port);         
                 // Calc sockaddr size
                 hostaddrlen = sizeof(struct sockaddr_in6);
             }

@@ -188,6 +188,15 @@ int sendFile(char* filename) {
         return -1;
     }
     
+    // get server response
+    int nbytes = readSocket();
+    if (-1 == nbytes) {
+        fprintf(stderr, "Couldn't read file information from socket\n");
+        fflush(stderr);
+        return -1;
+    }
+    printf("\n%s\n", buffer);
+    
     printf("%i bytes of data were sent to the Server\n\n", size);
     fflush(stdout);
     return 0;

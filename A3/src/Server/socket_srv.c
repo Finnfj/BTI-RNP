@@ -373,6 +373,21 @@ int receiveFileFromClient(int sockfd){
         return -1;
     }
     
+    // TODO
+    // send response
+    memset(buffer, 0, MAXDATASIZE); 
+    char hostname[50];
+    char ip[20];
+    char date[20];
+    int status = 0;
+    status = getnameinfo(, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);
+    if (0 != status) {
+	fprintf(stderr, "Error: %s\n", gai_strerror(status)); // gai_strerror is getaddrinfo's Error descriptor
+	fflush(stderr);
+	return -1;
+    }
+    sprintf(buffer, "OK %s, %s, %s", hostname, ip, date);
+    
     printf("Data received: %i bytes\n", size);
     
     // save file
@@ -556,20 +571,8 @@ int listInformations(char* buf) {
             
             // Get client port directly from struct and calculate sockaddr size
             int hostaddrlen;
-            if(q->sa_family == AF_INET) {
-                // Read client port
-                sprintf(port, "%d", ((struct sockaddr_in*)(q))->sin_port);
-		fprintf(stdout, "PORT: %s\n", port);  
-		printf("client: connecting to: %i\n", ntohs(((struct sockaddr_in*)(q))->sin_port));
-                // Calc sockaddr size
-                hostaddrlen = sizeof(struct sockaddr_in);
-            } else {    // AF_INET6
-                // Read client port
-                sprintf(port, "%d", ((struct sockaddr_in6*)(q))->sin6_port);
-		fprintf(stdout, "PORT: %s\n", port);         
-                // Calc sockaddr size
-                hostaddrlen = sizeof(struct sockaddr_in6);
-            }
+            sprintf(port, "%d", ntohs(((struct sockaddr_in6*)(q))->sin6_port));
+	    hostaddrlen = sizeof(struct sockaddr_in6);
             
             int status = 0;
             status = getnameinfo(q, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);

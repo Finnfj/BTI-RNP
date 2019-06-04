@@ -560,7 +560,7 @@ int listInformations(char* buf) {
                 // Read client port
                 sprintf(port, "%d", ((struct sockaddr_in*)(q))->sin_port);
 		fprintf(stdout, "PORT: %s\n", port);  
-		printf("client: connecting to: %i\n", ntohs(((struct sockaddr_in*)(q))->sin_port);
+		printf("client: connecting to: %i\n", ntohs(((struct sockaddr_in*)(q))->sin_port));
                 // Calc sockaddr size
                 hostaddrlen = sizeof(struct sockaddr_in);
             } else {    // AF_INET6

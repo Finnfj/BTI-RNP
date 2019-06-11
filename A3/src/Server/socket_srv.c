@@ -626,7 +626,7 @@ int listInformations(char* buf) {
             // Get client port directly from struct and calculate sockaddr size
             int hostaddrlen;
             sprintf(port, "%d", ntohs(((struct sockaddr_in6*)(q))->sin6_port));
-	    hostaddrlen = sizeof(struct sockaddr_in6);
+            hostaddrlen = sizeof(struct sockaddr_in6);
             
             int status = 0;
             status = getnameinfo(q, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);

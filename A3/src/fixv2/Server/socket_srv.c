@@ -569,17 +569,8 @@ int listInformations(char* buf) {
             
             // Get client port directly from struct and calculate sockaddr size
             int hostaddrlen;
-            if(q->sa_family == AF_INET) {
-                // Read client port
-                sprintf(port, "%d", ((struct sockaddr_in*)(q))->sin_port);
-                // Calc sockaddr size
-                hostaddrlen = sizeof(struct sockaddr_in);
-            } else {    // AF_INET6
-                // Read client port
-                sprintf(port, "%d", ((struct sockaddr_in6*)(q))->sin6_port);
-                // Calc sockaddr size
-                hostaddrlen = sizeof(struct sockaddr_in6);
-            }
+            sprintf(port, "%d", ntohs(((struct sockaddr_in6*)(q))->sin6_port));
+            hostaddrlen = sizeof(struct sockaddr_in6);
             
             int status = 0;
             status = getnameinfo(q, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);

@@ -9,10 +9,7 @@
  
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <ifaddrs.h>
 #include <netinet/in.h>
-#include <net/if.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -48,6 +45,7 @@ struct sockaddr_ref {
 int s_tcp, maxfd;					            // Main socket descriptor
 struct sockaddr_ref cliaddresses[MAXCLIENTS];   // Store client informations
 char buffer[MAXDATASIZE];   			        // buffer
+char ipaddr[INET6_ADDRSTRLEN];                  // store ip address
 fd_set master;                                  // Filedescriptor set for non-blocking multiplexing
 struct sockaddr_storage *cliaddrp;              // Pointer to a cliaddr from cliaddresses
 
@@ -126,7 +124,7 @@ int main ( )
             fflush(stderr);
             continue;
         }
-        // One successful socket is enough, go on
+        // One successful socket is enough
         break;
     }
 
@@ -375,81 +373,27 @@ int receiveFileFromClient(int sockfd){
         fflush(stderr);
         return -1;
     }
-    //print received data informations
+    
     printf("Data received: %i bytes\n", size);
     
-    // save file
-    int s = saveFile(size, filename);
-    if (-1 == s) {
-        fprintf(stderr, "Couldn't save file\n");
-        fflush(stderr);
-    }
-    
-    // send response to client 
-    char serverInfo[MAXDATASIZE] = "";
-    
+    // save file and respond to client
     time_t rawtime;
     time(&rawtime);
     char timestamp[36];
     strftime(timestamp, 36, "%d.%m.%Y %H:%M:%S", localtime(&rawtime));
-    
-    // Get our hostname
-    char serverName[50];
-    if (gethostname(serverName, sizeof(serverName)) == -1) {
-        perror("couldn't get hostname");
-        return -1;
-    }
-    
-    // Get an IPv4 local broadcast ip
-    char serverIp[NI_MAXHOST];
-    struct ifaddrs* ifaddr;
-    struct ifaddrs* ifa;
-    struct ifreq ifr;
-    getifaddrs(&ifaddr);
-    int n, family;
-    char host[NI_MAXHOST];
-    // look which interface contains the wanted IP.
-    for (ifa = ifaddr, n = 0; ifa != NULL; ifa = ifa->ifa_next, n++) {
-        if (ifa->ifa_addr == NULL)
-            continue;
-
-        family = ifa->ifa_addr->sa_family;
-        
-        /* Look for IPv4 addresses that are not loopback */
-
-        if (family == AF_INET) {
-            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-            if (s != 0) {
-                printf("getnameinfo() failed: %s\n", gai_strerror(s));
-                exit(EXIT_FAILURE);
-            }
-
-            if (strcmp(host, "127.") != 0 && strcmp(host, "0.") != 0 && strcmp(host, ":") != 0) {
-                strcpy(serverIp, host);
-            }
-        }
-    }
-    freeifaddrs(ifaddr);
-    
-    // combine informations
-    if (-1 == s) {
-        strcat(serverInfo, "Server Response: FAIL,\n");
+    if (-1 == saveFile(size, filename)) {
+        fprintf(stderr, "Couldn't save file\n");
+        fflush(stderr);
+        sprintf(buffer,"FAIL %s\n", timestamp); 
     } else {
-        strcat(serverInfo, "Server Response: OK,\n");
+        sprintf(buffer,"OK %s\n", timestamp); 
     }
-    strcat(serverInfo, serverName);
-    strcat(serverInfo, "\n");
-    strcat(serverInfo, serverIp);
-    strcat(serverInfo, "\n");
-    strcat(serverInfo, timestamp);
-    
-    // send response
-    if (-1 == writeSocket(serverInfo, sockfd)) {
-        fprintf(stderr, "Couldn't write filecontent to socket\n");
+    // send response to client
+    if (-1 == writeSocket(buffer, sockfd)) {
+        fprintf(stderr, "Couldn't write response to socket\n");
         fflush(stderr);
         return -1;
     }
-    
     return 0;
 }
 
@@ -625,8 +569,17 @@ int listInformations(char* buf) {
             
             // Get client port directly from struct and calculate sockaddr size
             int hostaddrlen;
-            sprintf(port, "%d", ntohs(((struct sockaddr_in6*)(q))->sin6_port));
-	    hostaddrlen = sizeof(struct sockaddr_in6);
+            if(q->sa_family == AF_INET) {
+                // Read client port
+                sprintf(port, "%d", ((struct sockaddr_in*)(q))->sin_port);
+                // Calc sockaddr size
+                hostaddrlen = sizeof(struct sockaddr_in);
+            } else {    // AF_INET6
+                // Read client port
+                sprintf(port, "%d", ((struct sockaddr_in6*)(q))->sin6_port);
+                // Calc sockaddr size
+                hostaddrlen = sizeof(struct sockaddr_in6);
+            }
             
             int status = 0;
             status = getnameinfo(q, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);

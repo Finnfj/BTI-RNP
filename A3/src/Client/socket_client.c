@@ -82,6 +82,11 @@ int main()
                         connected = true;
                         puts("Connection was established!");
                         fflush(stdout);
+                        if (gethostname(buffer, MAXDATASIZE) == -1) {
+                            perror("couldn't get hostname");
+                            return -1;
+                        }
+                        writeSocket(buffer);
                     }
                 } else {
                     fprintf(stderr, "Argument missing\n\n");

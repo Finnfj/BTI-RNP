@@ -432,7 +432,7 @@ int connectToServer(char* address) {
     {
         struct in6_addr* peerAddress = &(((struct sockaddr_in6*) (p->ai_addr))->sin6_addr);
         char addrstrbuf[INET6_ADDRSTRLEN] = "";
-        inet_ntop(AF_INET, peerAddress, addrstrbuf, sizeof(addrstrbuf));
+        inet_ntop(AF_INET6, peerAddress, addrstrbuf, sizeof(addrstrbuf));
         printf("Connected to %s.\n", addrstrbuf);
         fflush(stdout);
     }

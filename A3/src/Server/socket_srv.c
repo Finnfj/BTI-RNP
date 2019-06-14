@@ -118,6 +118,14 @@ int main ( )
             fflush(stderr);
             return -1;
         }
+        par = 0; 
+        if(-1 == setsockopt(s_tcp, IPPROTO_IPV6, IPV6_V6ONLY, &par, sizeof(int)))
+        {
+            close(s_tcp);
+            perror("Error setting socket option");
+            fflush(stderr);
+            return -1;
+        }
 
         if(-1 == bind(s_tcp, p->ai_addr, p->ai_addrlen))
         {
@@ -400,36 +408,36 @@ int receiveFileFromClient(int sockfd){
         return -1;
     }
     
-    // Get an IPv4 local broadcast ip
-    char serverIp[NI_MAXHOST];
-    struct ifaddrs* ifaddr;
-    struct ifaddrs* ifa;
-    struct ifreq ifr;
-    getifaddrs(&ifaddr);
-    int n, family;
-    char host[NI_MAXHOST];
-    // look which interface contains the wanted IP.
-    for (ifa = ifaddr, n = 0; ifa != NULL; ifa = ifa->ifa_next, n++) {
-        if (ifa->ifa_addr == NULL)
-            continue;
-
-        family = ifa->ifa_addr->sa_family;
-        
-        /* Look for IPv4 addresses that are not loopback */
-
-        if (family == AF_INET) {
-            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-            if (s != 0) {
-                printf("getnameinfo() failed: %s\n", gai_strerror(s));
-                exit(EXIT_FAILURE);
-            }
-
-            if (strcmp(host, "127.") != 0 && strcmp(host, "0.") != 0 && strcmp(host, ":") != 0) {
-                strcpy(serverIp, host);
-            }
+    // Get ip
+    int family;
+    for (int i = 0; i < MAXCLIENTS; i++) {
+        if (cliaddresses[i].socknum == sockfd) {
+            family = cliaddresses[i].cliaddr.ss_family;
+            break;
         }
     }
-    freeifaddrs(ifaddr);
+    char *serverIp;
+    struct sockaddr_storage info;
+    socklen_t sockaddr_len;
+    if (family == AF_INET) {
+        serverIp = (char *) malloc(INET_ADDRSTRLEN);
+        struct sockaddr_in *pinfo = (struct sockaddr_in *) &info;
+        sockaddr_len = sizeof(struct sockaddr_in);
+        if (-1 == getsockname(sockfd, (struct sockaddr *) &info, &sockaddr_len)) {
+            perror("couldn't get sockname");
+            return -1;
+        }
+        inet_ntop(family, &pinfo->sin_addr, serverIp, INET_ADDRSTRLEN);
+    } else {
+        serverIp = (char *) malloc(INET6_ADDRSTRLEN);
+        struct sockaddr_in6 *pinfo = (struct sockaddr_in6 *) &info;
+        sockaddr_len = sizeof(struct sockaddr_in6);
+        if (-1 == getsockname(sockfd, (struct sockaddr *) &info, &sockaddr_len)) {
+            perror("couldn't get sockname");
+            return -1;
+        }
+        inet_ntop(family, &pinfo->sin6_addr, serverIp, INET6_ADDRSTRLEN);
+    }
     
     // combine informations
     if (-1 == s) {

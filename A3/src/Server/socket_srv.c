@@ -275,7 +275,7 @@ int main ( )
                             
                             // receive hostname
                             readSocket(news);
-                            cliaddresses[j].hostname =  (char *) malloc(strlen(buffer));
+                            cliaddresses[j].hostname =  (char *) malloc(strlen(buffer)+1);
                             strcpy(cliaddresses[j].hostname, buffer);
                         }
                     }

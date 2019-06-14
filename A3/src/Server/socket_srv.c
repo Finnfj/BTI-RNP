@@ -636,8 +636,33 @@ int listInformations(char* buf) {
             sprintf(port, "%d", ntohs(((struct sockaddr_in6*)(q))->sin6_port));
             hostaddrlen = sizeof(struct sockaddr_in6);
             
+            char *peerIp;
+            struct sockaddr_storage info;
+            socklen_t sockaddr_len;
+            int family = cliaddresses[j].cliaddr.ss_family;
+            int sockfd = cliaddresses[j].socknum;
+            if (family == AF_INET) {
+                peerIp = (char *) malloc(INET_ADDRSTRLEN);
+                struct sockaddr_in *pinfo = (struct sockaddr_in *) &info;
+                sockaddr_len = sizeof(struct sockaddr_in);
+                if (-1 == getpeername(sockfd, (struct sockaddr *) &info, &sockaddr_len)) {
+                    perror("couldn't get peername");
+                    return -1;
+                }
+                inet_ntop(family, &pinfo->sin_addr, peerIp, INET_ADDRSTRLEN);
+            } else {
+                peerIp = (char *) malloc(INET6_ADDRSTRLEN);
+                struct sockaddr_in6 *pinfo = (struct sockaddr_in6 *) &info;
+                sockaddr_len = sizeof(struct sockaddr_in6);
+                if (-1 == getpeername(sockfd, (struct sockaddr *) &info, &sockaddr_len)) {
+                    perror("couldn't get peername");
+                    return -1;
+                }
+                inet_ntop(family, &pinfo->sin6_addr, peerIp, INET6_ADDRSTRLEN);
+            }
+            
             int status = 0;
-            status = getnameinfo(q, hostaddrlen, hostname, sizeof(hostname), NULL, 0, 0);
+            status = getnameinfo((struct sockaddr *) &info, sockaddr_len, hostname, sizeof(hostname), NULL, 0, 0);
             if (0 != status) {
                 fprintf(stderr, "Error: %s\n", gai_strerror(status)); // gai_strerror is getaddrinfo's Error descriptor
                 fflush(stderr);
